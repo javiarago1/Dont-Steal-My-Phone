@@ -1,6 +1,8 @@
 package com.example.dontstealmyphone
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import okhttp3.WebSocketListener
 import okhttp3.WebSocket
 import okio.ByteString
@@ -8,11 +10,12 @@ import okio.ByteString
 class WebSocketEchoListener(private val service: AntiTheftService) : WebSocketListener() {
     override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
         Log.d("WebSocket", "WebSocket connected")
-        service.registerDevice()
+        //service.registerDevice()
     }
 
 
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onMessage(webSocket: WebSocket, text: String) {
         service.handleReceivedCommand(text)
     }

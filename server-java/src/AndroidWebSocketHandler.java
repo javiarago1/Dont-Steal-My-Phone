@@ -8,16 +8,17 @@ import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @WebSocket(maxIdleTime = Integer.MAX_VALUE)
-public class MyWebSocketHandler {
+public class AndroidWebSocketHandler {
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
     @OnWebSocketConnect
     public void onConnect(Session session) {
-        System.out.println("New client connected: " + session.getRemoteAddress().getAddress());
+        String deviceId = session.getUpgradeRequest().getParameterMap().get("device_id").get(0);
+        SessionManager.addSession(deviceId, session);
+        System.out.println("New android device with id: "+deviceId);
     }
 
     @OnWebSocketClose
@@ -32,17 +33,12 @@ public class MyWebSocketHandler {
         try {
             Map<String, String> messageMap = mapper.readValue(message, new TypeReference<>() {});
             String type = messageMap.get("type");
+            String deviceId = session.getUpgradeRequest().getParameterMap().get("device_id").get(0);
             switch (type) {
-                case "register_device":
-                    String deviceId = messageMap.get("device_id");
-                    if (deviceId != null) {
-                        SessionManager.addSession(deviceId, session);
-                        System.out.println("Device registered with ID: " + deviceId);
-                    }
-                    break;
-
-                default:
-                    System.out.println("Unknown message type: " + type);
+                case "location_update" -> {
+                    System.out.println(message);
+                    SessionManager.updateLocationToWebClient(deviceId , message);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -50,7 +46,7 @@ public class MyWebSocketHandler {
     }
 
     public static void sendToClient(String deviceId, String message) {
-        Session session = SessionManager.getSession(deviceId);
+        Session session = SessionManager.getAndroidSession(deviceId);
         if (session != null && session.isOpen()) {
             try {
                 session.getRemote().sendString(message);
@@ -59,4 +55,6 @@ public class MyWebSocketHandler {
             }
         }
     }
+
+
 }

@@ -1,56 +1,54 @@
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.HandlerList;
-import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.websocket.server.WebSocketHandler;
 import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
-
 
 public class WebSocketServer {
     public static void main(String[] args) throws Exception {
         Server server = new Server(5000);
 
-        // Contexto principal para servir servlets
-        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
-        context.setContextPath("/");
-
-        // Agregar el servlet que maneja el reporte de robo
-        context.addServlet(new ServletHolder(new ReportTheftServlet()), "/report-theft");
-
-        // Configurar el WebSocketHandler y agregarlo al contexto
-        WebSocketHandler wsHandler = new WebSocketHandler() {
+        // Handler para Android WebSockets en "/android"
+        WebSocketHandler androidWsHandler = new WebSocketHandler() {
             @Override
             public void configure(WebSocketServletFactory factory) {
-                // Tiempo de espera de inactividad del socket, en milisegundos.
-                factory.getPolicy().setIdleTimeout(10000);
-                // Registrar tu clase WebSocket aquí
-                factory.register(MyWebSocketHandler.class);
+                factory.getPolicy().setIdleTimeout(3600000);
+                factory.register(AndroidWebSocketHandler.class);
             }
         };
-        // Asegúrate de que el contexto maneje los WebSockets también.
-        context.setHandler(wsHandler);
 
-        // El manejador de sesiones es necesario si deseas manejar sesiones HTTP
-        context.setSessionHandler(new SessionHandler());
+        // Handler para Web Client WebSockets en "/web"
+        WebSocketHandler webWsHandler = new WebSocketHandler() {
+            @Override
+            public void configure(WebSocketServletFactory factory) {
+                factory.getPolicy().setIdleTimeout(3600000);
+                factory.register(WebClientWebSocketHandler.class);
+            }
+        };
 
-        // Establecer el ResourceHandler para servir archivos estáticos.
-        // Debe ser una ruta relativa al directorio donde se ejecuta el servidor
-        ResourceHandler resourceHandler = new ResourceHandler();
-        resourceHandler.setDirectoriesListed(false);
-        resourceHandler.setWelcomeFiles(new String[]{"report.html"});
-        resourceHandler.setResourceBase("src/main/webapp");
-
-        // Agregar los handlers al servidor en orden
+        // Configurar los contextos para cada handler
         HandlerList handlers = new HandlerList();
-        handlers.addHandler(resourceHandler); // Primero servir los estáticos
-        handlers.addHandler(context); // Luego manejar los servlets y websockets
+
+        // Contexto para Android WebSockets
+        ServletContextHandler androidContext = new ServletContextHandler(ServletContextHandler.SESSIONS);
+        androidContext.setContextPath("/android");
+        androidContext.setHandler(androidWsHandler);
+        handlers.addHandler(androidContext);
+
+        // Contexto para Web Client WebSockets
+        ServletContextHandler webContext = new ServletContextHandler(ServletContextHandler.SESSIONS);
+        webContext.setContextPath("/web");
+        webContext.setHandler(webWsHandler);
+        handlers.addHandler(webContext);
+
+        // Configura el server con ambos handlers
         server.setHandler(handlers);
 
         try {
             server.start();
             server.join();
+        } catch (Exception e) {
+            e.printStackTrace();
         } finally {
             server.destroy();
         }
