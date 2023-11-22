@@ -17,7 +17,7 @@ public class AndroidWebSocketHandler {
     @OnWebSocketConnect
     public void onConnect(Session session) {
         String deviceId = session.getUpgradeRequest().getParameterMap().get("device_id").get(0);
-        SessionManager.addSession(deviceId, session);
+        SessionManager.addAndroidSession(deviceId, session);
         System.out.println("New android device with id: "+deviceId);
     }
 

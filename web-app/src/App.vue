@@ -1,13 +1,11 @@
 <template>
-  <div id="app" class="d-flex flex-column vh-100 justify-content-between align-items-center px-3">
-    <div v-if="!mapVisible" class="input-group mb-3">
-      <input v-model="userCode" placeholder="Enter your code" class="form-control form-control-lg" />
-      <div class="input-group-append">
-        <button @click="connectWebSocket" class="btn btn-lg btn-primary">Show my location</button>
-      </div>
+  <div id="app">
+    <div v-if="!mapVisible" class="input-section">
+      <input v-model="userCode" placeholder="Enter your code" class="input-control" />
+      <button @click="connectWebSocket" class="button-control">Show my location</button>
     </div>
-    <div v-show="mapVisible" id="map" class="map-container w-100 mb-3"></div>
-    <button v-if="mapVisible" @click="stopEffects" class="btn btn-lg btn-danger w-100">Stop Effects</button>
+    <div v-show="mapVisible" id="map" class="map-container"></div>
+    <button v-if="mapVisible" @click="stopEffects" class="button-stop">Stop doing sounds</button>
   </div>
 </template>
 
@@ -19,27 +17,35 @@ export default {
   data() {
     return {
       userCode: '',
-      deviceId: 'YOUR_DEVICE_ID', // Reemplaza con el ID real del dispositivo
+      deviceId: 'YOUR_DEVICE_ID',
       ws: null,
       map: null,
       marker: null,
       mapVisible: false,
-      route: [] // Array para almacenar la ruta
+      route: []
     };
   },
   methods: {
     connectWebSocket() {
-      this.ws = new WebSocket(`ws://192.168.1.132:5000/web/socket.io?deviceId=${this.deviceId}`);
+      this.ws = new WebSocket(`ws://192.168.1.132:5000/web/socket.io?deviceId=${this.userCode}`);
 
       this.ws.onopen = () => {
         this.mapVisible = true;
-        // Envía cualquier mensaje necesario al servidor aquí
       };
 
       this.ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'location_update') {
-          this.handleLocationUpdate(data);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.status === 'success') {
+            this.mapVisible = true;
+          } else if (data.status === 'error') {
+            alert(data.message);
+            this.mapVisible = false;
+          } else if (data.type === 'location_update') {
+            this.handleLocationUpdate(data);
+          }
+        } catch (error) {
+          console.error('Error parsing message data:', error);
         }
       };
 
@@ -49,7 +55,7 @@ export default {
     },
     handleLocationUpdate(data) {
       const location = { lat: data.latitude, lng: data.longitude };
-      this.route.push(location); // Almacena la ubicación en la ruta
+      this.route.push(location); // Store the location in the route
 
       if (!this.map) {
         this.initMap(location);
@@ -58,6 +64,7 @@ export default {
         this.updateRoute();
       }
     },
+
     initMap(location) {
       this.map = L.map('map').setView([location.lat, location.lng], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -78,9 +85,13 @@ export default {
     },
     stopEffects() {
       if (this.ws) {
-        this.ws.close();
+        const message = JSON.stringify({
+          command: "stop_effects",
+          deviceId: this.deviceId
+        });
+        this.ws.send(message);
+        this.mapVisible = false;
       }
-      this.mapVisible = false;
     }
   }
 };
@@ -88,29 +99,53 @@ export default {
 
 <style>
 #app {
-  margin: 0 auto; /* Center the app in the middle of the screen */
-  max-width: 1000px; /* Max width for the app */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: auto;
+  max-height: 100vh;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 20px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .map-container {
-  height: 70vh; /* Larger height on desktop */
+  width: calc(100% - 40px);
+  height: 50vh;
+  max-height: 50vh;
+  background-color: #e0e0e0;
+  border: 1px solid #ccc;
+  margin: 20px 0;
 }
 
-.input-group {
+.input-section, .input-control, .button-control, .button-stop {
   width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
 }
 
-.btn, .form-control {
-  width: 100%; /* Full width for large screens */
+.button-stop {
+  background-color: red;
+  color: white;
+  border: none;
 }
 
-/* Adjust button size for smaller screens */
-@media (max-width: 576px) {
-  .btn, .form-control {
-    width: auto; /* Auto width for smaller screens */
+@media only screen and (max-width: 600px) {
+  #app {
+    padding: 0;
+  }
+
+  .map-container {
+    width: 100%;
+    margin: 10px 0;
+  }
+
+  .input-section, .input-control, .button-control, .button-stop {
+    padding: 10px;
   }
 }
 
-/* Additional styles for a polished look */
-/* ... */
 </style>

@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SessionManager {
-    private static SessionManager instance;
     private static final Map<String, Session> androidSessions = new ConcurrentHashMap<>();
 
     private static final Map<String, Session> webSessions = new ConcurrentHashMap<>();
@@ -16,19 +15,19 @@ public class SessionManager {
     }
 
 
-    public static void addSession(String deviceId, Session session) {
+    public static void addAndroidSession(String deviceId, Session session) {
         androidSessions.put(deviceId, session);
     }
 
-
-    public static void removeSessionByValue(String deviceId) {
-        androidSessions.remove(deviceId);
-    }
 
     public static Session getAndroidSession(String deviceId) {
         return androidSessions.get(deviceId);
     }
 
+
+    public static void removeAndroidClientById(String deviceId){
+        androidSessions.remove(deviceId);
+    }
     public static void removeWebClientById(String deviceId){
         webSessions.remove(deviceId);
     }

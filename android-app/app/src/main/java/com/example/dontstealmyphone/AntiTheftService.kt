@@ -14,7 +14,6 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioAttributes
 import android.media.AudioManager
-import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -41,11 +40,13 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
     private val objectMapper = jacksonObjectMapper()
     private var textToSpeech: TextToSpeech? = null
     private lateinit var locationManager: LocationManager
+    private var flashHandler: Handler? = null
+    private var ttsHandler: Handler? = null
+
 
 
 
     override fun onBind(intent: Intent): IBinder? {
-        // Este es un servicio iniciado, por lo que no proporcionamos binding.
         return null
     }
 
@@ -69,18 +70,14 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
         val NOTIFICATION_CHANNEL_ID = "com.example.dontstealmyphone"
         val channelName = "Anti Theft Service Background"
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-
-        // Crear el canal de notificación con alta importancia
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_HIGH).apply {
-                setSound(notificationSoundUri, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
-                enableLights(true)
-                lightColor = Color.RED
-                enableVibration(true)
-            }
-            manager.createNotificationChannel(channel)
+        val notificationSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_HIGH).apply {
+            setSound(notificationSoundUri, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
+            enableLights(true)
+            lightColor = Color.RED
+            enableVibration(true)
         }
+        manager.createNotificationChannel(channel)
 
         // Asegúrate de que el ícono que usarás existe en la carpeta drawable de tu proyecto.
         val notificationBuilder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID).apply {
@@ -88,7 +85,7 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
             setContentTitle("App is running in background")
             setContentText("Touch to open.")
             setSmallIcon(R.drawable.ic_launcher_foreground) // Cambia a un ícono existente en tu carpeta drawable
-            setPriority(NotificationCompat.PRIORITY_HIGH)
+            priority = NotificationCompat.PRIORITY_HIGH
             setCategory(Notification.CATEGORY_ALARM)
             setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
         }
@@ -97,18 +94,18 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
         startForeground(2, notification)
     }
 
-    private fun initializeWebSocket() {
-        val deviceId = getDeviceIdd() // Asegúrate de que este método devuelva el ID correcto del dispositivo
+    fun initializeWebSocket() {
+        val deviceId = getDeviceIdentifier() // Asegúrate de que este método devuelva el ID correcto del dispositivo
         val client = OkHttpClient()
         val request = Request.Builder().url("ws://192.168.1.132:5000/android/socket.io/?EIO=4&transport=websocket&device_id=$deviceId").build()
         webSocket = client.newWebSocket(request, webSocketListener)
-        print("connected?")
     }
 
      @RequiresApi(Build.VERSION_CODES.O)
      fun handleReceivedCommand(command: String) {
         when (command) {
             "start_theft_alarm" -> startAnarchy()
+            "stop_effects" -> stopAnarchy()
         }
     }
 
@@ -143,101 +140,92 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
 
     @RequiresApi(Build.VERSION_CODES.O)
     fun startAnarchy() {
-        // Configurar el volumen del TTS al máximo
+        // Establecer volumen máximo.
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0)
 
-        // Configurar TextToSpeech para repetir el mensaje
-        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                // Nada que hacer aquí
-            }
-
-            override fun onDone(utteranceId: String?) {
-                // Cuando termina de hablar, repetir el mensaje después de un breve intervalo
-                Handler(Looper.getMainLooper()).postDelayed({
-                    textToSpeech?.speak("Este móvil ha sido robado.", TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-                }, 1000) // Retrasar la próxima locución en 1 segundo
-            }
-
-            override fun onError(utteranceId: String?) {
-                Log.e("TTS", "Error en la locución")
-            }
-        })
-
-        flashLightOnOff()
-
-        // Configurar la vibración
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        val vibrationEffect = VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE)
-        vibrator.vibrate(vibrationEffect)
-
-        // Configurar TextToSpeech para reproducir un sonido estridente al final de cada frase
-        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-            }
-
-            override fun onDone(utteranceId: String?) {
-                // Reproducir un sonido estridente al final de la frase
-                //playEstridenteSound()
-
-                // Volver a hablar después de un breve intervalo
-                Handler(Looper.getMainLooper()).postDelayed({
-                    // Asegúrate de no iniciar un nuevo mensaje de voz si el servicio se está deteniendo
-                    val isStopping = false
-                    if (!isStopping) {
-                        textToSpeech?.speak("Este móvil ha sido robado.", TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-                    }
-                }, 1000) // Retrasar la próxima locución en 1 segundo
-            }
-
-            override fun onError(utteranceId: String?) {
-                TODO("Not yet implemented")
-            }
-        })
-
-
-        // Hablar por primera vez sin retraso
+        // TextToSpeech.
+        val speechRate = 1.5f
+        textToSpeech!!.setSpeechRate(speechRate)
         val utteranceId = "AntiTheftMessage"
         textToSpeech?.speak("Este móvil ha sido robado.", TextToSpeech.QUEUE_FLUSH, null, utteranceId)
 
+        // Preparar el Handler para la repetición.
+        ttsHandler = Handler(Looper.getMainLooper())
+        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) { }
+            override fun onDone(utteranceId: String?) {
+                ttsHandler?.postDelayed({
+                    playEstridenteSound()
+                    textToSpeech?.speak("Este móvil ha sido robado.", TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                }, 500)
+            }
+            override fun onError(utteranceId: String?) { }
+        })
+
+        // Vibración.
+        val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+        val vibrationEffect = VibrationEffect.createWaveform(longArrayOf(0, 500, 250), intArrayOf(0, VibrationEffect.DEFAULT_AMPLITUDE, 0), 0)
+        vibrator.vibrate(vibrationEffect)
+
+        // Luz del flash.
+        flashHandler = Handler(Looper.getMainLooper())
+        flashLightOnOff()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            "STOP_ANARCHY" -> stopAnarchy()
+        }
+        return START_STICKY
+    }
+
+
+    private fun stopAnarchy() {
+        // Detener TextToSpeech.
+        textToSpeech?.stop()
+        ttsHandler?.removeCallbacksAndMessages(null)
+
+        // Detener vibración.
+        val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+        vibrator.cancel()
+
+        // Detener flash.
+        flashHandler?.removeCallbacksAndMessages(null)
+        try {
+            val cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
+            cameraManager.setTorchMode(cameraManager.cameraIdList[0], false)
+        } catch (e: CameraAccessException) {
+            Log.e("AntiTheftService", "Error al acceder a la cámara para el flash", e)
+        }
     }
 
     private fun flashLightOnOff() {
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraId = cameraManager.cameraIdList[0] // Suponiendo que el flash está en la cámara principal
-        var isFlashOn = false
-        val runnable = object : Runnable {
+        flashHandler?.post(object : Runnable {
+            var isFlashOn = false
             override fun run() {
+                isFlashOn = !isFlashOn
                 try {
-                    isFlashOn = !isFlashOn
-                    cameraManager.setTorchMode(cameraId, isFlashOn) // Encender o apagar el flash
-                    Handler(Looper.getMainLooper()).postDelayed(this, 500) // Cambiar el estado cada 500ms
+                    val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                    cameraManager.setTorchMode(cameraManager.cameraIdList[0], isFlashOn)
                 } catch (e: CameraAccessException) {
                     Log.e("AntiTheftService", "Error al acceder a la cámara para el flash", e)
                 }
+                flashHandler?.postDelayed(this, 500)
             }
-        }
-        Handler(Looper.getMainLooper()).post(runnable)
+        })
     }
+
 
     private fun playEstridenteSound() {
         val toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1000) // Duración de 1 segundo
+        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1000)
     }
 
 
-
-    fun registerDevice() {
-        val deviceId = getDeviceIdd()
-        val registerMessage = objectMapper.writeValueAsString(mapOf("type" to "register_device", "device_id" to deviceId))
-        webSocket?.send(registerMessage)
-    }
-
-
-     private fun getDeviceIdd(): String {
-        return "YOUR_DEVICE_ID"
+    private fun getDeviceIdentifier(): String {
+        val settings = getSharedPreferences(MainActivity.PREFS_NAME, MODE_PRIVATE)
+        return settings.getString(MainActivity.DEVICE_ID_KEY, "UNREGISTERED_DEVICE") ?: "UNREGISTERED_DEVICE"
     }
 
     private fun initializeLocationManager() {
@@ -251,7 +239,6 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
                 this
             )
         } catch (ex: SecurityException) {
-            // Log any security exceptions
             println("Security Exception when requesting location updates: ${ex.message}")
         }
     }
@@ -272,9 +259,12 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
     }
 
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onDestroy() {
-        super.onDestroy()
+        stopAnarchy()
         textToSpeech?.shutdown()
-        webSocket?.cancel() // Asegúrate de cerrar el WebSocket al destruir el servicio.
+        webSocket?.cancel()
+        super.onDestroy()
     }
+
 }
