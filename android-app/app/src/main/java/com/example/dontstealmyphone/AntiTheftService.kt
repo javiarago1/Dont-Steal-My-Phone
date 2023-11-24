@@ -54,11 +54,9 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
         super.onCreate()
         initializeWebSocket()
 
-        // Iniciar servicio en primer plano para evitar RemoteServiceException
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startMyOwnForeground()
         } else {
-            // Para versiones anteriores a Android Oreo
             startForeground(1, Notification())
         }
         textToSpeech = TextToSpeech(this, this)
@@ -79,7 +77,6 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
         }
         manager.createNotificationChannel(channel)
 
-        // Asegúrate de que el ícono que usarás existe en la carpeta drawable de tu proyecto.
         val notificationBuilder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID).apply {
             setOngoing(true)
             setContentTitle("App is running in background")
@@ -116,12 +113,10 @@ class AntiTheftService : Service(), TextToSpeech.OnInitListener, LocationListene
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e("TTS", "Este idioma no es soportado.")
             } else {
-                // Filtrar por voces en español y seleccionar una
                 val spanishVoices = textToSpeech?.voices?.filter { it.locale == localeSpanish }
                 if (spanishVoices.isNullOrEmpty()) {
                     Log.e("TTS", "No hay voces en español disponibles.")
                 } else {
-                    // Esto es un ejemplo, deberías verificar qué voz prefieres usar.
                     val maleVoice = spanishVoices.find { voice -> voice.name.contains("es_ES") }
                     if (maleVoice != null) {
                         textToSpeech?.voice = maleVoice
